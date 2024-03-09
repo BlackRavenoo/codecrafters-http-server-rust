@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream}};
 
-use http_server_starter_rust::text_plain;
+use http_server_starter_rust::response;
 
 #[tokio::main]
 async fn main() {
@@ -57,11 +57,36 @@ async fn handle_connection(mut stream: TcpStream) {
             stream.write("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).await.unwrap();
         },
         Some("echo") => {
-            stream.write(&text_plain(&path.collect::<Vec<&str>>().join("/"))).await.unwrap();
+            stream.write(&response("text/plain", &path.collect::<Vec<&str>>().join("/"))).await.unwrap();
         }
         Some("user-agent") => {
+            stream.write(&response("text/plain", headers.get("User-Agent").unwrap())).await.unwrap();
+        }
+        Some("files") => {
+            let args: Vec<String> = std::env::args().collect();
+            let dir = args[2].clone();
+            let path_to_file = format!(
+                "{}{}",
+                dir,
+                path.collect::<Vec<&str>>().join("/")
+            );
+            println!("{}", path_to_file);
+            match Path::new(&path_to_file).exists() {
+                true => {
+                    stream.write(
+                        &response(
+                            "application/octet-stream",
+                            &std::fs::read_to_string(path_to_file).unwrap()
+                        )
+                    )
+                    .await
+                    .unwrap();
+                },
+                false => {
+                    stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()).await.unwrap();
+                }
+            }
 
-            stream.write(&text_plain(headers.get("User-Agent").unwrap())).await.unwrap();
         }
         Some(_) => {
             stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()).await.unwrap();
