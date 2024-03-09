@@ -1,14 +1,18 @@
-use std::{collections::HashMap, io::{Read, Write}, net::{TcpListener, TcpStream}};
+use std::collections::HashMap;
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream}};
 
 use http_server_starter_rust::text_plain;
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
-    
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                handle_connection(stream);
+#[tokio::main]
+async fn main() {
+    let listener = TcpListener::bind("127.0.0.1:4221").await.unwrap();
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                tokio::spawn(async move {
+                    handle_connection(stream).await;
+                });
             }
             Err(e) => {
                 println!("error: {}", e);
@@ -17,9 +21,9 @@ fn main() {
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
+async fn handle_connection(mut stream: TcpStream) {
     let mut buf = [0; 1024];
-    let len = stream.read(&mut buf).unwrap();
+    let len = stream.read(&mut buf).await.unwrap();
     let mut args = std::str::from_utf8(&buf[..len]).unwrap().split("\r\n");
     //println!("{:#?}", args); //debug
     let start_line_args = args.next().unwrap().split(" ");
@@ -50,17 +54,17 @@ fn handle_connection(mut stream: TcpStream) {
 
     match path.next() {
         Some("") => {
-            stream.write("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).unwrap();
+            stream.write("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).await.unwrap();
         },
         Some("echo") => {
-            stream.write(&text_plain(&path.collect::<Vec<&str>>().join("/"))).unwrap();
+            stream.write(&text_plain(&path.collect::<Vec<&str>>().join("/"))).await.unwrap();
         }
         Some("user-agent") => {
 
-            stream.write(&text_plain(headers.get("User-Agent").unwrap())).unwrap();
+            stream.write(&text_plain(headers.get("User-Agent").unwrap())).await.unwrap();
         }
         Some(_) => {
-            stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()).unwrap();
+            stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()).await.unwrap();
         },
         None => eprintln!("Something went wrong!")
     }
