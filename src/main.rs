@@ -27,7 +27,7 @@ fn handle_connection(mut stream: TcpStream) {
 
     let mut headers = HashMap::new();
     for arg in args {
-        let mut key_value = arg.split(":");
+        let mut key_value = arg.split(": ");
         let key = match key_value.next() {
             Some(key) => {
                 if key == "" {break}
