@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, fs::File, io::Write, path::Path};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpStream}};
 
 use http_server_starter_rust::response;
@@ -26,11 +26,12 @@ async fn handle_connection(mut stream: TcpStream) {
     let len = stream.read(&mut buf).await.unwrap();
     let mut args = std::str::from_utf8(&buf[..len]).unwrap().split("\r\n");
     //println!("{:#?}", args); //debug
-    let start_line_args = args.next().unwrap().split(" ");
-    let mut path = start_line_args.skip(1).next().unwrap().split("/").skip(1);
+    let mut start_line_args = args.next().unwrap().split(" ");
+    let method = start_line_args.next().unwrap();
+    let mut path = start_line_args.next().unwrap().split("/").skip(1);
 
     let mut headers = HashMap::new();
-    for arg in args {
+    while let Some(arg) = args.next() {
         let mut key_value = arg.split(": ");
         let key = match key_value.next() {
             Some(key) => {
@@ -52,6 +53,8 @@ async fn handle_connection(mut stream: TcpStream) {
         headers.insert(key, value);
     }
 
+    //println!("{:#?}", args.next());
+
     match path.next() {
         Some("") => {
             stream.write("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).await.unwrap();
@@ -63,28 +66,39 @@ async fn handle_connection(mut stream: TcpStream) {
             stream.write(&response("text/plain", headers.get("User-Agent").unwrap())).await.unwrap();
         }
         Some("files") => {
-            let args: Vec<String> = std::env::args().collect();
-            let dir = args[2].clone();
+            let args_: Vec<String> = std::env::args().collect();
+            let dir = args_[2].clone();
             let path_to_file = format!(
                 "{}{}",
                 dir,
                 path.collect::<Vec<&str>>().join("/")
             );
             println!("{}", path_to_file);
-            match Path::new(&path_to_file).exists() {
-                true => {
-                    stream.write(
-                        &response(
-                            "application/octet-stream",
-                            &std::fs::read_to_string(path_to_file).unwrap()
-                        )
-                    )
-                    .await
-                    .unwrap();
-                },
-                false => {
-                    stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()).await.unwrap();
+            match method {
+                "GET" => {
+                    match Path::new(&path_to_file).exists() {
+                        true => {
+                            stream.write(
+                                &response(
+                                    "application/octet-stream",
+                                    &std::fs::read_to_string(path_to_file).unwrap()
+                                )
+                            )
+                            .await
+                            .unwrap();
+                        },
+                        false => {
+                            stream.write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes()).await.unwrap();
+                        }
+                    }
                 }
+                "POST" => {
+                    let text = args.next().unwrap().as_bytes();
+                    let mut file = File::create(path_to_file).unwrap();
+                    file.write_all(text).unwrap();
+                    stream.write("HTTP/1.1 201 Created\r\n\r\n".as_bytes()).await.unwrap();
+                }
+                _ => unimplemented!()
             }
 
         }
