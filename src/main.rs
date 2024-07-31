@@ -22,10 +22,10 @@ async fn main() {
 }
 
 async fn handle_connection(mut stream: TcpStream) {
-    let mut buf = [0; 1024];
+    let mut buf = [0; 4096];
     let len = stream.read(&mut buf).await.unwrap();
+    println!("{}", std::str::from_utf8(&buf[..len]).unwrap());
     let mut args = std::str::from_utf8(&buf[..len]).unwrap().split("\r\n");
-    //println!("{:#?}", args); //debug
     let mut start_line_args = args.next().unwrap().split(" ");
     let method = start_line_args.next().unwrap();
     let mut path = start_line_args.next().unwrap().split("/").skip(1);
@@ -53,17 +53,16 @@ async fn handle_connection(mut stream: TcpStream) {
         headers.insert(key, value);
     }
 
-    //println!("{:#?}", args.next());
-
     match path.next() {
         Some("") => {
             stream.write("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).await.unwrap();
         },
         Some("echo") => {
-            stream.write(&response("text/plain", &path.collect::<Vec<&str>>().join("/"))).await.unwrap();
+            stream.write(&response("text/plain", &headers, &path.collect::<Vec<&str>>().join("/"))).await.unwrap();
         }
         Some("user-agent") => {
-            stream.write(&response("text/plain", headers.get("User-Agent").unwrap())).await.unwrap();
+            let user_agent = headers.get("User-Agent").unwrap();
+            stream.write(&response("text/plain", &headers, user_agent)).await.unwrap();
         }
         Some("files") => {
             let args_: Vec<String> = std::env::args().collect();
@@ -81,6 +80,7 @@ async fn handle_connection(mut stream: TcpStream) {
                             stream.write(
                                 &response(
                                     "application/octet-stream",
+                                    &headers,
                                     &std::fs::read_to_string(path_to_file).unwrap()
                                 )
                             )
