@@ -3,7 +3,7 @@ use std::collections::HashMap;
 pub fn response(content_type: &str, headers: &HashMap<&str, &str>, text: &str) -> Vec<u8> {
     let headers = headers.iter().fold(HashMap::new(), |mut acc, (key, val)| {
         match *key {
-            "Accept-Encoding" if matches!(*val, "gzip") => {
+            "Accept-Encoding" if val.split(',').any(|encoding| encoding.trim() == "gzip") => {
                 acc.insert("Content-Encoding", "gzip");
             }
             _ => ()
